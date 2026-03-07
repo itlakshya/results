@@ -1,0 +1,185 @@
+.page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  margin: 0;
+  padding: 16px;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-image: url("/images/BANNER 1800x1900.jpg");
+  position: relative;
+}
+
+.logoMobile {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 160px;
+  height: auto;
+  display: block;
+  z-index: 4;
+}
+
+.logoDesktop {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 350px;
+  height: auto;
+  display: none;
+  z-index: 4;
+}
+
+.mobileContainer {
+  width: min(92vw, 360px);
+  padding: 18px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 16px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.9);
+  position: relative;
+  text-align: center;
+  display: block;
+  margin-top: 84px;
+  z-index: 3;
+}
+
+.desktopContainer {
+  background-color: #fff;
+  border-radius: 16px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.9);
+  text-align: center;
+  width: min(84vw, 480px);
+  padding: 26px 24px;
+  display: none;
+}
+
+.headingDesktop {
+  font-size: 24px;
+  font-weight: bold;
+  line-height: 1.2;
+  margin-bottom: 18px;
+  color: #333;
+  overflow: hidden;
+  font-family: Cambria, Cochin, Georgia, Times, "Times New Roman", serif;
+}
+
+.headingMobile {
+  text-align: center;
+  margin-bottom: 14px;
+  font-size: 28px;
+}
+
+.messageList {
+  list-style: none;
+  margin-bottom: 10px;
+  color: #f50d0d;
+  padding: 0;
+}
+
+.formGroup {
+  margin-bottom: 15px;
+}
+
+.desktopFormGroup {
+  margin-bottom: 12px;
+}
+
+.label {
+  display: block;
+  font-weight: bold;
+  color: #555;
+}
+
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 18px;
+  text-transform: uppercase;
+}
+
+.desktopInput {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 18px;
+  text-transform: uppercase;
+}
+
+.button {
+  background-color: #4caf50;
+  color: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  width: 100%;
+}
+
+.desktopButton {
+  background-color: #4caf50;
+  color: #fff;
+  width: 100%;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 8px 14px;
+  border: none;
+}
+
+.adminLink {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+@media (min-width: 600px) and (max-width: 767px) {
+  .mobileContainer {
+    width: min(88vw, 420px);
+    margin-top: 92px;
+  }
+
+  .logoMobile {
+    width: 190px;
+  }
+}
+
+@media (min-width: 768px) {
+  .page {
+    padding: 24px;
+    background-image: url("/images/BANNER NEW.jpg");
+  }
+
+  .mobileContainer {
+    display: none;
+  }
+
+  .desktopContainer {
+    display: block;
+    position: absolute;
+    top: 20%;
+    right: 1.5%;
+    z-index: 3;
+  }
+
+  .logoMobile {
+    display: none;
+  }
+
+  .logoDesktop {
+    display: block;
+  }
+}
