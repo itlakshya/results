@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { findUserByCredentials } from "@/lib/users";
 import styles from "./page.module.css";
@@ -106,9 +105,6 @@ export default async function Home({ searchParams }: HomeProps) {
           </div>
         </form>
       </div>
-      <Link className={styles.adminLink} href="/admin/login">
-        Admin Login
-      </Link>
     </main>
   );
 }
