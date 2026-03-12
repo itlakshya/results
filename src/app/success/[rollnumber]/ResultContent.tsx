@@ -109,34 +109,15 @@ export default function ResultContent({ user }: ResultContentProps) {
               <th>Total Marks</th>
               <th>Grade</th>
             </tr>
-            <tr>
-              <th>Management Accounting (F-2)</th>
-              <td>{user.EFFP_UEM}</td>
-              <td>{user.EFFP_IAM}</td>
-              <td>{user.EFFP_TM}</td>
-              <td>{user.EFFP_G}</td>
-            </tr>
-            <tr>
-              <th>Corporate &amp; Business Law (F-4)</th>
-              <td>{user.AIB_UEM}</td>
-              <td>{user.AIB_IAM}</td>
-              <td>{user.AIB_TM}</td>
-              <td>{user.AIB_G}</td>
-            </tr>
-            <tr>
-              <th>Optional group one - Language</th>
-              <td>{user.FA_UEM}</td>
-              <td>{user.FA_IAM}</td>
-              <td>{user.FA_TM}</td>
-              <td>{user.FA_G}</td>
-            </tr>
-            <tr>
-              <th>AE Group one - Communicative English</th>
-              <td>{user.AGO_UEM}</td>
-              <td>{user.AGO_IAM}</td>
-              <td>{user.AGO_TM}</td>
-              <td>{user.AGO_G}</td>
-            </tr>
+            {user.subjects.map((subject) => (
+              <tr key={subject.key}>
+                <th>{subject.label}</th>
+                <td>{subject.ueMark}</td>
+                <td>{subject.iaMark}</td>
+                <td>{subject.totalMark}</td>
+                <td>{subject.grade}</td>
+              </tr>
+            ))}
             <tr className={styles.spacerRow}>
               <td className={styles.spacerCell} colSpan={5}></td>
             </tr>

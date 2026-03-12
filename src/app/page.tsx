@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { findUserByCredentials } from "@/lib/users";
+import { clearStudentSession, setStudentAuthCookie } from "@/lib/student-session";
 import styles from "./page.module.css";
 
 type HomeProps = {
@@ -15,9 +16,11 @@ async function loginAction(formData: FormData): Promise<void> {
   const user = await findUserByCredentials(rollnumber, dob);
 
   if (!user) {
+    await clearStudentSession();
     redirect("/?error=invalid");
   }
 
+  await setStudentAuthCookie(user.Rollnumber, user.DOB);
   redirect(`/success/${encodeURIComponent(user.Rollnumber)}`);
 }
 

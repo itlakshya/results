@@ -88,6 +88,16 @@
   font-size: 13px;
 }
 
+.downloadLink {
+  color: #0d4db8;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.downloadLink:hover {
+  text-decoration: underline;
+}
+
 .meta {
   margin: 12px 0;
   color: #435775;

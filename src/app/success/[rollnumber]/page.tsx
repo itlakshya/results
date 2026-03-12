@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
-import { findUserByRollnumber } from "@/lib/users";
+import { notFound, redirect } from "next/navigation";
+import { getStudentSession } from "@/lib/student-session";
+import { findUserByCredentials } from "@/lib/users";
 import ResultContent from "./ResultContent";
 
 type SuccessPageProps = {
@@ -8,7 +9,19 @@ type SuccessPageProps = {
 
 export default async function SuccessPage({ params }: SuccessPageProps) {
   const { rollnumber } = await params;
-  const user = await findUserByRollnumber(decodeURIComponent(rollnumber));
+  const session = await getStudentSession();
+
+  if (!session) {
+    redirect("/");
+  }
+
+  const decodedRollnumber = decodeURIComponent(rollnumber);
+
+  if (session.rollnumber.trim().toUpperCase() !== decodedRollnumber.trim().toUpperCase()) {
+    notFound();
+  }
+
+  const user = await findUserByCredentials(session.rollnumber, session.dob);
 
   if (!user) {
     notFound();

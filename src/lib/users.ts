@@ -2,31 +2,20 @@ import { promises as fs } from "fs";
 import path from "path";
 import { Pool } from "pg";
 
+export type SubjectRecord = {
+  key: string;
+  label: string;
+  ueMark: string;
+  iaMark: string;
+  totalMark: string;
+  grade: string;
+};
+
 export type UserRecord = {
   id: number;
   Rollnumber: string;
   DOB: string;
   Name: string;
-  EFFP_UEM: string;
-  EFFP_IAM: string;
-  EFFP_TM: string;
-  EFFP_G: string;
-  AIB_UEM: string;
-  AIB_IAM: string;
-  AIB_TM: string;
-  AIB_G: string;
-  FA_UEM: string;
-  FA_IAM: string;
-  FA_TM: string;
-  FA_G: string;
-  AGO_UEM: string;
-  AGO_IAM: string;
-  AGO_TM: string;
-  AGO_G: string;
-  SGO_UEM: string;
-  SGO_IAM: string;
-  SGO_TM: string;
-  SGO_G: string;
   TTM: string;
   TIM: string;
   TCM: string;
@@ -35,48 +24,50 @@ export type UserRecord = {
   R: string;
   NOSF: string | null;
   S: string | null;
+  subjects: SubjectRecord[];
+  rawData: Record<string, string>;
 };
 
-type UserInput = Partial<UserRecord> & Record<string, unknown>;
+type UserInput = Partial<UserRecord> &
+  Record<string, unknown> & {
+    rawData?: Record<string, unknown>;
+    subjects?: unknown;
+  };
 
 const DATA_FILE_PATH =
   process.env.RESULT_DATA_FILE ?? path.join(process.cwd(), "src", "data", "users.json");
 const DATABASE_URL = process.env.DATABASE_URL;
 const USE_POSTGRES = Boolean(DATABASE_URL && /^postgres(ql)?:\/\//i.test(DATABASE_URL));
 
-const USER_FIELD_KEYS: Array<keyof Omit<UserRecord, "id">> = [
-  "Rollnumber",
-  "DOB",
-  "Name",
-  "EFFP_UEM",
-  "EFFP_IAM",
-  "EFFP_TM",
-  "EFFP_G",
-  "AIB_UEM",
-  "AIB_IAM",
-  "AIB_TM",
-  "AIB_G",
-  "FA_UEM",
-  "FA_IAM",
-  "FA_TM",
-  "FA_G",
-  "AGO_UEM",
-  "AGO_IAM",
-  "AGO_TM",
-  "AGO_G",
-  "SGO_UEM",
-  "SGO_IAM",
-  "SGO_TM",
-  "SGO_G",
-  "TTM",
-  "TIM",
-  "TCM",
-  "GT",
-  "P",
-  "R",
-  "NOSF",
-  "S",
-];
+const STATIC_FIELDS = ["Rollnumber", "DOB", "Name", "TTM", "TIM", "TCM", "GT", "P", "R", "NOSF", "S"] as const;
+const COMMON_FIELD_ALIASES: Record<string, string[]> = {
+  TTM: ["TotalTheoryMarks"],
+  TIM: ["TotalInternalMarks"],
+  TCM: ["TotalCAMarks"],
+  GT: ["GrandTotal"],
+  P: ["Percentage"],
+  R: ["Result"],
+  NOSF: ["NumberOfSubjectsFailed"],
+  S: ["SGPA"],
+};
+const SUBJECT_SUFFIX_ALIASES = {
+  ueMark: ["UniversityExamMark", "UEI", "UEM"],
+  iaMark: ["InternalAssessmentMark", "IAI", "IAM"],
+  totalMark: ["TotalMark", "TM"],
+  grade: ["Grade", "G"],
+} as const;
+const SUBJECT_SUFFIX_TO_FIELD = new Map<string, keyof Omit<SubjectRecord, "key" | "label">>([
+  ["UNIVERSITYEXAMMARK", "ueMark"],
+  ["UEI", "ueMark"],
+  ["UEM", "ueMark"],
+  ["INTERNALASSESSMENTMARK", "iaMark"],
+  ["IAI", "iaMark"],
+  ["IAM", "iaMark"],
+  ["TOTALMARK", "totalMark"],
+  ["TM", "totalMark"],
+  ["GRADE", "grade"],
+  ["G", "grade"],
+]);
 
 let pool: Pool | null = null;
 
@@ -112,40 +103,167 @@ function toNullableString(value: unknown): string | null {
   return String(value).trim();
 }
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function formatDateParts(day: number, month: number, year: number): string {
+  return `${padDatePart(day)}-${padDatePart(month)}-${year}`;
+}
+
+function excelSerialToDate(serial: number): string {
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  const utcDate = new Date(excelEpoch + Math.round(serial) * millisecondsPerDay);
+
+  return formatDateParts(utcDate.getUTCDate(), utcDate.getUTCMonth() + 1, utcDate.getUTCFullYear());
+}
+
+function normalizeDobValue(value: unknown): string {
+  const normalized = toStringValue(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (/^\d+(\.\d+)?$/.test(normalized)) {
+    const numericValue = Number(normalized);
+
+    if (numericValue >= 20000 && numericValue <= 60000) {
+      return excelSerialToDate(numericValue);
+    }
+  }
+
+  const separatorMatch = normalized.match(/^(\d{1,4})[\/.-](\d{1,2})[\/.-](\d{1,4})$/);
+
+  if (separatorMatch) {
+    const first = Number(separatorMatch[1]);
+    const second = Number(separatorMatch[2]);
+    const third = Number(separatorMatch[3]);
+
+    if (separatorMatch[1].length === 4) {
+      return formatDateParts(third, second, first);
+    }
+
+    return formatDateParts(first, second, third);
+  }
+
+  return normalized;
+}
+
+function normalizeRecordEntries(record: Record<string, unknown>): Array<[string, string]> {
+  return Object.entries(record)
+    .filter(([key]) => key !== "id" && key !== "rawData" && key !== "subjects")
+    .map(([key, value]) => [String(key).trim(), toStringValue(value)]);
+}
+
+function buildRawData(record: UserInput): Record<string, string> {
+  const rawDataSource =
+    record.rawData && typeof record.rawData === "object"
+      ? normalizeRecordEntries(record.rawData as Record<string, unknown>)
+      : normalizeRecordEntries(record);
+  const rawData = Object.fromEntries(rawDataSource);
+
+  for (const [canonicalKey, aliases] of Object.entries(COMMON_FIELD_ALIASES)) {
+    if (toStringValue(rawData[canonicalKey]).length > 0) {
+      continue;
+    }
+
+    for (const alias of aliases) {
+      const aliasValue = toStringValue(rawData[alias]);
+      if (aliasValue.length > 0) {
+        rawData[canonicalKey] = aliasValue;
+        break;
+      }
+    }
+  }
+
+  return rawData;
+}
+
+function formatSubjectLabel(subjectKey: string): string {
+  return subjectKey.replace(/_/g, " ").trim();
+}
+
+function buildSubjectsFromRawData(rawData: Record<string, string>): SubjectRecord[] {
+  const subjects = new Map<string, SubjectRecord>();
+
+  for (const [fieldName, value] of Object.entries(rawData)) {
+    const trimmedFieldName = fieldName.trim();
+    const separatorIndex = trimmedFieldName.lastIndexOf("_");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const subjectKey = trimmedFieldName.slice(0, separatorIndex).trim();
+    const suffix = trimmedFieldName.slice(separatorIndex + 1).trim().replace(/\s+/g, "").toUpperCase();
+    const targetField = SUBJECT_SUFFIX_TO_FIELD.get(suffix);
+
+    if (!subjectKey || !targetField) {
+      continue;
+    }
+
+    const existing =
+      subjects.get(subjectKey) ??
+      ({
+        key: subjectKey,
+        label: formatSubjectLabel(subjectKey),
+        ueMark: "",
+        iaMark: "",
+        totalMark: "",
+        grade: "",
+      } satisfies SubjectRecord);
+
+    existing[targetField] = value;
+    subjects.set(subjectKey, existing);
+  }
+
+  return Array.from(subjects.values());
+}
+
+function sanitizeSubjects(subjects: unknown, rawData: Record<string, string>): SubjectRecord[] {
+  if (!Array.isArray(subjects)) {
+    return buildSubjectsFromRawData(rawData);
+  }
+
+  const cleanSubjects = subjects
+    .filter((subject): subject is Record<string, unknown> => Boolean(subject && typeof subject === "object"))
+    .map((subject) => ({
+      key: toStringValue(subject.key),
+      label: toStringValue(subject.label) || formatSubjectLabel(toStringValue(subject.key)),
+      ueMark: toStringValue(subject.ueMark),
+      iaMark: toStringValue(subject.iaMark),
+      totalMark: toStringValue(subject.totalMark),
+      grade: toStringValue(subject.grade),
+    }))
+    .filter((subject) => subject.key.length > 0);
+
+  return cleanSubjects.length > 0 ? cleanSubjects : buildSubjectsFromRawData(rawData);
+}
+
 function sanitizeRecord(record: UserInput, fallbackId: number): UserRecord {
+  const rawData = buildRawData(record);
+  const subjects = sanitizeSubjects(record.subjects, rawData);
+
   return {
     id: Number(record.id ?? fallbackId),
-    Rollnumber: toStringValue(record.Rollnumber),
-    DOB: toStringValue(record.DOB),
-    Name: toStringValue(record.Name),
-    EFFP_UEM: toStringValue(record.EFFP_UEM),
-    EFFP_IAM: toStringValue(record.EFFP_IAM),
-    EFFP_TM: toStringValue(record.EFFP_TM),
-    EFFP_G: toStringValue(record.EFFP_G),
-    AIB_UEM: toStringValue(record.AIB_UEM),
-    AIB_IAM: toStringValue(record.AIB_IAM),
-    AIB_TM: toStringValue(record.AIB_TM),
-    AIB_G: toStringValue(record.AIB_G),
-    FA_UEM: toStringValue(record.FA_UEM),
-    FA_IAM: toStringValue(record.FA_IAM),
-    FA_TM: toStringValue(record.FA_TM),
-    FA_G: toStringValue(record.FA_G),
-    AGO_UEM: toStringValue(record.AGO_UEM),
-    AGO_IAM: toStringValue(record.AGO_IAM),
-    AGO_TM: toStringValue(record.AGO_TM),
-    AGO_G: toStringValue(record.AGO_G),
-    SGO_UEM: toStringValue(record.SGO_UEM),
-    SGO_IAM: toStringValue(record.SGO_IAM),
-    SGO_TM: toStringValue(record.SGO_TM),
-    SGO_G: toStringValue(record.SGO_G),
-    TTM: toStringValue(record.TTM),
-    TIM: toStringValue(record.TIM),
-    TCM: toStringValue(record.TCM),
-    GT: toStringValue(record.GT),
-    P: toStringValue(record.P),
-    R: toStringValue(record.R),
-    NOSF: toNullableString(record.NOSF),
-    S: toNullableString(record.S),
+    Rollnumber: toStringValue(rawData.Rollnumber ?? record.Rollnumber),
+    DOB: normalizeDobValue(rawData.DOB ?? record.DOB),
+    Name: toStringValue(rawData.Name ?? record.Name),
+    TTM: toStringValue(rawData.TTM ?? record.TTM),
+    TIM: toStringValue(rawData.TIM ?? record.TIM),
+    TCM: toStringValue(rawData.TCM ?? record.TCM),
+    GT: toStringValue(rawData.GT ?? record.GT),
+    P: toStringValue(rawData.P ?? record.P),
+    R: toStringValue(rawData.R ?? record.R),
+    NOSF: toNullableString(rawData.NOSF ?? record.NOSF),
+    S: toNullableString(rawData.S ?? record.S),
+    subjects,
+    rawData: {
+      ...rawData,
+      DOB: normalizeDobValue(rawData.DOB ?? record.DOB),
+    },
   };
 }
 
@@ -178,26 +296,6 @@ async function ensurePostgresTable(): Promise<void> {
         "Rollnumber" VARCHAR(300) NOT NULL,
         "DOB" VARCHAR(300) NOT NULL,
         "Name" VARCHAR(300) NOT NULL DEFAULT '',
-        "EFFP_UEM" VARCHAR(300) NOT NULL DEFAULT '',
-        "EFFP_IAM" VARCHAR(300) NOT NULL DEFAULT '',
-        "EFFP_TM" VARCHAR(300) NOT NULL DEFAULT '',
-        "EFFP_G" VARCHAR(300) NOT NULL DEFAULT '',
-        "AIB_UEM" VARCHAR(300) NOT NULL DEFAULT '',
-        "AIB_IAM" VARCHAR(300) NOT NULL DEFAULT '',
-        "AIB_TM" VARCHAR(300) NOT NULL DEFAULT '',
-        "AIB_G" VARCHAR(300) NOT NULL DEFAULT '',
-        "FA_UEM" VARCHAR(300) NOT NULL DEFAULT '',
-        "FA_IAM" VARCHAR(300) NOT NULL DEFAULT '',
-        "FA_TM" VARCHAR(300) NOT NULL DEFAULT '',
-        "FA_G" VARCHAR(300) NOT NULL DEFAULT '',
-        "AGO_UEM" VARCHAR(300) NOT NULL DEFAULT '',
-        "AGO_IAM" VARCHAR(300) NOT NULL DEFAULT '',
-        "AGO_TM" VARCHAR(300) NOT NULL DEFAULT '',
-        "AGO_G" VARCHAR(300) NOT NULL DEFAULT '',
-        "SGO_UEM" VARCHAR(300) NOT NULL DEFAULT '',
-        "SGO_IAM" VARCHAR(300) NOT NULL DEFAULT '',
-        "SGO_TM" VARCHAR(300) NOT NULL DEFAULT '',
-        "SGO_G" VARCHAR(300) NOT NULL DEFAULT '',
         "TTM" VARCHAR(300) NOT NULL DEFAULT '',
         "TIM" VARCHAR(300) NOT NULL DEFAULT '',
         "TCM" VARCHAR(300) NOT NULL DEFAULT '',
@@ -205,39 +303,62 @@ async function ensurePostgresTable(): Promise<void> {
         "P" VARCHAR(300) NOT NULL DEFAULT '',
         "R" VARCHAR(300) NOT NULL DEFAULT '',
         "NOSF" VARCHAR(300),
-        "S" VARCHAR(300)
+        "S" VARCHAR(300),
+        "rawData" JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "subjects" JSONB NOT NULL DEFAULT '[]'::jsonb
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "rawData" JSONB NOT NULL DEFAULT '{}'::jsonb;
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "subjects" JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "TTM" VARCHAR(300) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "TIM" VARCHAR(300) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "TCM" VARCHAR(300) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "GT" VARCHAR(300) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "P" VARCHAR(300) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "R" VARCHAR(300) NOT NULL DEFAULT '';
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "NOSF" VARCHAR(300);
+    `);
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "S" VARCHAR(300);
     `);
   } finally {
     client.release();
   }
 }
 
-function toPostgresParams(user: UserRecord): Array<string | null> {
+function toPostgresParams(user: UserRecord): Array<string | object | null> {
   return [
     user.Rollnumber,
     user.DOB,
     user.Name,
-    user.EFFP_UEM,
-    user.EFFP_IAM,
-    user.EFFP_TM,
-    user.EFFP_G,
-    user.AIB_UEM,
-    user.AIB_IAM,
-    user.AIB_TM,
-    user.AIB_G,
-    user.FA_UEM,
-    user.FA_IAM,
-    user.FA_TM,
-    user.FA_G,
-    user.AGO_UEM,
-    user.AGO_IAM,
-    user.AGO_TM,
-    user.AGO_G,
-    user.SGO_UEM,
-    user.SGO_IAM,
-    user.SGO_TM,
-    user.SGO_G,
     user.TTM,
     user.TIM,
     user.TCM,
@@ -246,6 +367,8 @@ function toPostgresParams(user: UserRecord): Array<string | null> {
     user.R,
     user.NOSF,
     user.S,
+    JSON.stringify(user.rawData),
+    JSON.stringify(user.subjects),
   ];
 }
 
@@ -271,17 +394,16 @@ async function findUserByCredentialsFromPostgres(
       `
       SELECT * FROM "result_user"
       WHERE UPPER(TRIM("Rollnumber")) = UPPER(TRIM($1))
-        AND UPPER(TRIM("DOB")) = UPPER(TRIM($2))
-      LIMIT 1
       `,
-      [rollnumber, dob],
+      [rollnumber],
     );
 
-    if (res.rows.length === 0) {
-      return null;
-    }
+    const normalizedDob = normalizeValue(normalizeDobValue(dob));
+    const match = res.rows
+      .map((row, index) => sanitizeRecord(row, index + 1))
+      .find((user) => normalizeValue(normalizeDobValue(user.DOB)) === normalizedDob);
 
-    return sanitizeRecord(res.rows[0], 1);
+    return match ?? null;
   } finally {
     client.release();
   }
@@ -325,19 +447,9 @@ async function replaceUsersInPostgres(rows: UserInput[]): Promise<number> {
       await client.query(
         `
         INSERT INTO "result_user" (
-          "Rollnumber","DOB","Name","EFFP_UEM","EFFP_IAM","EFFP_TM","EFFP_G",
-          "AIB_UEM","AIB_IAM","AIB_TM","AIB_G",
-          "FA_UEM","FA_IAM","FA_TM","FA_G",
-          "AGO_UEM","AGO_IAM","AGO_TM","AGO_G",
-          "SGO_UEM","SGO_IAM","SGO_TM","SGO_G",
-          "TTM","TIM","TCM","GT","P","R","NOSF","S"
+          "Rollnumber","DOB","Name","TTM","TIM","TCM","GT","P","R","NOSF","S","rawData","subjects"
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,
-          $8,$9,$10,$11,
-          $12,$13,$14,$15,
-          $16,$17,$18,$19,
-          $20,$21,$22,$23,
-          $24,$25,$26,$27,$28,$29,$30,$31
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb
         )
         `,
         toPostgresParams(user),
@@ -403,5 +515,78 @@ export async function replaceUsersFromUpload(rows: UserInput[]): Promise<number>
 }
 
 export function getUploadTemplateHeaders(): string[] {
-  return ["id", ...USER_FIELD_KEYS];
+  return [
+    "Rollnumber",
+    "DOB",
+    "Name",
+    "[Subject]_UniversityExamMark",
+    "[Subject]_InternalAssessmentMark",
+    "[Subject]_TotalMark",
+    "[Subject]_Grade",
+    "TotalTheoryMarks",
+    "TotalInternalMarks",
+    "TotalCAMarks",
+    "GrandTotal",
+    "Percentage",
+    "Result",
+    "NumberOfSubjectsFailed",
+    "SGPA",
+  ];
+}
+
+export function getSupportedSubjectFieldExamples(): string[] {
+  return [
+    `English_${SUBJECT_SUFFIX_ALIASES.ueMark[0]}`,
+    `English_${SUBJECT_SUFFIX_ALIASES.iaMark[0]}`,
+    `English_${SUBJECT_SUFFIX_ALIASES.totalMark[0]}`,
+    `English_${SUBJECT_SUFFIX_ALIASES.grade[0]}`,
+  ];
+}
+
+export function getUploadTemplateCsv(): string {
+  const headers = [
+    "Rollnumber",
+    "DOB",
+    "Name",
+    "English_UniversityExamMark",
+    "English_InternalAssessmentMark",
+    "English_TotalMark",
+    "English_Grade",
+    "Subject2_UniversityExamMark",
+    "Subject2_InternalAssessmentMark",
+    "Subject2_TotalMark",
+    "Subject2_Grade",
+    "TotalTheoryMarks",
+    "TotalInternalMarks",
+    "TotalCAMarks",
+    "GrandTotal",
+    "Percentage",
+    "Result",
+    "NumberOfSubjectsFailed",
+    "SGPA",
+  ];
+
+  const sampleRow = [
+    "24BVR00001",
+    "01-01-2006",
+    "Student Name",
+    "45",
+    "25",
+    "70",
+    "A",
+    "40",
+    "22",
+    "62",
+    "B+",
+    "110",
+    "47",
+    "0",
+    "157",
+    "78.5",
+    "PASS",
+    "0",
+    "8.1",
+  ];
+
+  return `${headers.join(",")}\n${sampleRow.join(",")}\n`;
 }

@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 import * as XLSX from "xlsx";
 import { clearAdminAuthCookie, hasAdminAuthCookie } from "@/lib/admin-session";
-import { getAllUsers, getUploadTemplateHeaders, replaceUsersFromUpload } from "@/lib/users";
+import {
+  getAllUsers,
+  getSupportedSubjectFieldExamples,
+  getUploadTemplateHeaders,
+  replaceUsersFromUpload,
+} from "@/lib/users";
 import styles from "./page.module.css";
 
 type AdminPageProps = {
@@ -50,6 +55,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const params = await searchParams;
   const users = await getAllUsers();
   const headers = getUploadTemplateHeaders();
+  const subjectExamples = getSupportedSubjectFieldExamples();
   const status = params.status ?? "";
 
   return (
@@ -85,6 +91,18 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
         <div className={styles.helpBlock}>
           <strong>Required headers:</strong> {headers.join(", ")}
+        </div>
+        <div className={styles.helpBlock}>
+          <strong>Subject columns:</strong> Add one set per subject, for example{" "}
+          {subjectExamples.join(", ")}.
+        </div>
+        <div className={styles.helpBlock}>
+          <strong>Common fields:</strong> Rollnumber, DOB, Name, TTM, TIM, TCM, GT, P, R, NOSF, S.
+        </div>
+        <div className={styles.helpBlock}>
+          <a className={styles.downloadLink} href="/admin/template.csv">
+            Download CSV template
+          </a>
         </div>
 
         <div className={styles.meta}>Total records: {users.length}</div>
