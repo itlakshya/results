@@ -77,15 +77,6 @@ export default function ResultContent({ user }: ResultContentProps) {
 
   return (
     <main className={styles.page}>
-      <Image
-        className={styles.cornerLogo}
-        src="/images/LOGO FOR WEBSITE-01_1683719447.webp"
-        alt="Company Logo"
-        width={350}
-        height={90}
-        priority
-      />
-
       <div id="result-table-container" className={styles.tableContainer}>
         <div className={styles.logo}>
           <Image
