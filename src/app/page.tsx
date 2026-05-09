@@ -59,7 +59,7 @@ export default async function Home({ searchParams }: HomeProps) {
             <label className={styles.label} htmlFor="mobile-dob">
               DOB:
             </label>
-            <input className={styles.input} type="text" name="DOB" id="mobile-dob" required />
+            <input className={styles.input} type="text" name="DOB" id="mobile-dob" placeholder="DD-MM-YYYY" required />
           </div>
           <div className={styles.formGroup}>
             <label className={styles.label} htmlFor="mobile-rollnumber">
@@ -87,7 +87,14 @@ export default async function Home({ searchParams }: HomeProps) {
             <label className={styles.label} htmlFor="desktop-dob">
               DOB
             </label>
-            <input className={styles.desktopInput} type="text" name="DOB" id="desktop-dob" required />
+            <input
+              className={styles.desktopInput}
+              type="text"
+              name="DOB"
+              id="desktop-dob"
+              placeholder="DD-MM-YYYY"
+              required
+            />
           </div>
           <div className={styles.desktopFormGroup}>
             <label className={styles.label} htmlFor="desktop-rollnumber">
