@@ -23,6 +23,8 @@ type ResultContentProps = {
   user: UserRecord;
 };
 
+const DEFAULT_RESULT_HEADING = "B VOC - First Semester Result";
+
 function loadHtmlToPdfScript(): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.resolve();
@@ -43,6 +45,7 @@ function loadHtmlToPdfScript(): Promise<void> {
 
 export default function ResultContent({ user }: ResultContentProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const resultHeading = user.exam_name?.trim() || DEFAULT_RESULT_HEADING;
 
   useEffect(() => {
     loadHtmlToPdfScript().catch(() => undefined);
@@ -87,7 +90,7 @@ export default function ResultContent({ user }: ResultContentProps) {
             height={80}
           />
         </div>
-        <h1 className={styles.resultHeading}>B VOC - First Semester Result</h1>
+        <h1 className={styles.resultHeading}>{resultHeading}</h1>
         <h4>NAME: {user.Name}</h4>
         <h4>ROLLNUMBER: {user.Rollnumber}</h4>
         <div className={styles.tableScroll}>
