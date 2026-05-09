@@ -16,6 +16,7 @@ export type UserRecord = {
   Rollnumber: string;
   DOB: string;
   Name: string;
+  exam_name: string | null;
   TTM: string;
   TIM: string;
   TCM: string;
@@ -39,7 +40,6 @@ const DATA_FILE_PATH =
 const DATABASE_URL = process.env.DATABASE_URL;
 const USE_POSTGRES = Boolean(DATABASE_URL && /^postgres(ql)?:\/\//i.test(DATABASE_URL));
 
-const STATIC_FIELDS = ["Rollnumber", "DOB", "Name", "TTM", "TIM", "TCM", "GT", "P", "R", "NOSF", "S"] as const;
 const COMMON_FIELD_ALIASES: Record<string, string[]> = {
   TTM: ["TotalTheoryMarks"],
   TIM: ["TotalInternalMarks"],
@@ -251,6 +251,7 @@ function sanitizeRecord(record: UserInput, fallbackId: number): UserRecord {
     Rollnumber: toStringValue(rawData.Rollnumber ?? record.Rollnumber),
     DOB: normalizeDobValue(rawData.DOB ?? record.DOB),
     Name: toStringValue(rawData.Name ?? record.Name),
+    exam_name: toNullableString(rawData.exam_name ?? record.exam_name),
     TTM: toStringValue(rawData.TTM ?? record.TTM),
     TIM: toStringValue(rawData.TIM ?? record.TIM),
     TCM: toStringValue(rawData.TCM ?? record.TCM),
@@ -296,6 +297,7 @@ async function ensurePostgresTable(): Promise<void> {
         "Rollnumber" VARCHAR(300) NOT NULL,
         "DOB" VARCHAR(300) NOT NULL,
         "Name" VARCHAR(300) NOT NULL DEFAULT '',
+        "exam_name" VARCHAR(300),
         "TTM" VARCHAR(300) NOT NULL DEFAULT '',
         "TIM" VARCHAR(300) NOT NULL DEFAULT '',
         "TCM" VARCHAR(300) NOT NULL DEFAULT '',
@@ -309,6 +311,10 @@ async function ensurePostgresTable(): Promise<void> {
       );
     `);
 
+    await client.query(`
+      ALTER TABLE "result_user"
+      ADD COLUMN IF NOT EXISTS "exam_name" VARCHAR(300);
+    `);
     await client.query(`
       ALTER TABLE "result_user"
       ADD COLUMN IF NOT EXISTS "rawData" JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -359,6 +365,7 @@ function toPostgresParams(user: UserRecord): Array<string | object | null> {
     user.Rollnumber,
     user.DOB,
     user.Name,
+    user.exam_name,
     user.TTM,
     user.TIM,
     user.TCM,
@@ -432,7 +439,7 @@ async function findUserByRollnumberFromPostgres(rollnumber: string): Promise<Use
   }
 }
 
-async function replaceUsersInPostgres(rows: UserInput[]): Promise<number> {
+async function upsertUsersInPostgres(rows: UserInput[]): Promise<number> {
   await ensurePostgresTable();
   const cleanRows = rows
     .map((row, index) => sanitizeRecord(row, index + 1))
@@ -441,15 +448,50 @@ async function replaceUsersInPostgres(rows: UserInput[]): Promise<number> {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    await client.query('TRUNCATE TABLE "result_user" RESTART IDENTITY');
 
     for (const user of cleanRows) {
+      const existingRecord = await client.query<{ id: number }>(
+        `
+        SELECT "id"
+        FROM "result_user"
+        WHERE UPPER(TRIM("Rollnumber")) = UPPER(TRIM($1))
+        LIMIT 1
+        `,
+        [user.Rollnumber],
+      );
+
+      if (existingRecord.rows[0]) {
+        await client.query(
+          `
+          UPDATE "result_user"
+          SET
+            "Rollnumber" = $1,
+            "DOB" = $2,
+            "Name" = $3,
+            "exam_name" = $4,
+            "TTM" = $5,
+            "TIM" = $6,
+            "TCM" = $7,
+            "GT" = $8,
+            "P" = $9,
+            "R" = $10,
+            "NOSF" = $11,
+            "S" = $12,
+            "rawData" = $13::jsonb,
+            "subjects" = $14::jsonb
+          WHERE "id" = $15
+          `,
+          [...toPostgresParams(user), existingRecord.rows[0].id],
+        );
+        continue;
+      }
+
       await client.query(
         `
         INSERT INTO "result_user" (
-          "Rollnumber","DOB","Name","TTM","TIM","TCM","GT","P","R","NOSF","S","rawData","subjects"
+          "Rollnumber","DOB","Name","exam_name","TTM","TIM","TCM","GT","P","R","NOSF","S","rawData","subjects"
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb
         )
         `,
         toPostgresParams(user),
@@ -461,6 +503,35 @@ async function replaceUsersInPostgres(rows: UserInput[]): Promise<number> {
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function deleteAllUsersInPostgres(): Promise<void> {
+  await ensurePostgresTable();
+  const client = await getPool().connect();
+  try {
+    await client.query('TRUNCATE TABLE "result_user" RESTART IDENTITY');
+  } finally {
+    client.release();
+  }
+}
+
+async function deleteUsersByExamNameInPostgres(examName: string): Promise<number> {
+  await ensurePostgresTable();
+  const client = await getPool().connect();
+  try {
+    const res = await client.query(
+      `
+      DELETE FROM "result_user"
+      WHERE COALESCE(TRIM("exam_name"), '') <> ''
+        AND UPPER(TRIM("exam_name")) = UPPER(TRIM($1))
+      `,
+      [examName],
+    );
+
+    return res.rowCount ?? 0;
   } finally {
     client.release();
   }
@@ -502,16 +573,60 @@ export async function findUserByRollnumber(rollnumber: string): Promise<UserReco
   return match ?? null;
 }
 
-export async function replaceUsersFromUpload(rows: UserInput[]): Promise<number> {
+export async function upsertUsersFromUpload(rows: UserInput[]): Promise<number> {
   if (USE_POSTGRES) {
-    return replaceUsersInPostgres(rows);
+    return upsertUsersInPostgres(rows);
   }
   const cleanRows = rows
     .map((row, index) => sanitizeRecord(row, index + 1))
     .filter((row) => row.Rollnumber.length > 0 && row.DOB.length > 0);
 
-  await writeUsers(cleanRows.map((row, index) => ({ ...row, id: index + 1 })));
+  const existingUsers = await readUsers();
+  const usersByRollnumber = new Map<string, UserRecord>();
+
+  for (const user of existingUsers) {
+    usersByRollnumber.set(normalizeValue(user.Rollnumber), user);
+  }
+
+  for (const user of cleanRows) {
+    usersByRollnumber.set(normalizeValue(user.Rollnumber), user);
+  }
+
+  await writeUsers(Array.from(usersByRollnumber.values()).map((row, index) => ({ ...row, id: index + 1 })));
   return cleanRows.length;
+}
+
+export async function deleteAllUsers(): Promise<void> {
+  if (USE_POSTGRES) {
+    await deleteAllUsersInPostgres();
+    return;
+  }
+
+  await writeUsers([]);
+}
+
+export async function deleteUsersByExamName(examName: string): Promise<number> {
+  const normalizedExamName = examName.trim();
+
+  if (!normalizedExamName) {
+    return 0;
+  }
+
+  if (USE_POSTGRES) {
+    return deleteUsersByExamNameInPostgres(normalizedExamName);
+  }
+
+  const users = await readUsers();
+  const remainingUsers = users.filter(
+    (user) => normalizeValue(user.exam_name ?? "") !== normalizeValue(normalizedExamName),
+  );
+  const deletedCount = users.length - remainingUsers.length;
+
+  if (deletedCount > 0) {
+    await writeUsers(remainingUsers.map((user, index) => ({ ...user, id: index + 1 })));
+  }
+
+  return deletedCount;
 }
 
 export function getUploadTemplateHeaders(): string[] {
@@ -519,6 +634,7 @@ export function getUploadTemplateHeaders(): string[] {
     "Rollnumber",
     "DOB",
     "Name",
+    "exam_name",
     "[Subject]_UniversityExamMark",
     "[Subject]_InternalAssessmentMark",
     "[Subject]_TotalMark",
@@ -548,6 +664,7 @@ export function getUploadTemplateCsv(): string {
     "Rollnumber",
     "DOB",
     "Name",
+    "exam_name",
     "English_UniversityExamMark",
     "English_InternalAssessmentMark",
     "English_TotalMark",
@@ -570,6 +687,7 @@ export function getUploadTemplateCsv(): string {
     "24BVR00001",
     "01-01-2006",
     "Student Name",
+    "B VOC - First Semester Result",
     "45",
     "25",
     "70",

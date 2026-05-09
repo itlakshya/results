@@ -44,11 +44,15 @@
 }
 
 .uploadForm {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
+  align-items: flex-end;
   gap: 10px;
-  align-items: end;
   margin-bottom: 10px;
+}
+
+.fileField {
+  flex: 1;
+  min-width: 0;
 }
 
 .label {
@@ -62,20 +66,135 @@
   width: 100%;
   border: 1px solid #cad3e1;
   border-radius: 8px;
-  padding: 10px;
+  padding: 9px 10px;
   background: #fff;
+  min-height: 42px;
 }
 
 .uploadButton {
   border: none;
   border-radius: 8px;
-  background: #188142;
+  background: #2f7d57;
   color: #fff;
-  padding: 11px 14px;
+  padding: 10px 14px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  width: auto;
+  min-width: 124px;
+  align-self: flex-end;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.actionsRow {
+  margin-bottom: 12px;
+}
+
+.deleteAllButton {
+  border: none;
+  border-radius: 8px;
+  background: #f4f6f8;
+  color: #5f6b76;
+  border: 1px solid #d7dde3;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  width: auto;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.deleteFilteredButton {
+  border: none;
+  border-radius: 8px;
+  background: #b46a3f;
+  color: #fff;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  width: auto;
+  min-width: 158px;
+  align-self: end;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.uploadButton:hover,
+.deleteAllButton:hover,
+.deleteFilteredButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(28, 53, 93, 0.1);
+}
+
+.uploadButton:active,
+.deleteAllButton:active,
+.deleteFilteredButton:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.uploadButton:disabled,
+.deleteAllButton:disabled,
+.deleteFilteredButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.filterCard {
+  margin-bottom: 12px;
+  padding: 14px;
+  background: #fcfaf7;
+  border: 1px solid #ece4da;
+  border-radius: 10px;
+}
+
+.filterHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  color: #64584a;
+}
+
+.filterHint {
+  font-size: 13px;
+}
+
+.filterForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.selectField {
+  min-width: 0;
+}
+
+.select {
+  width: 100%;
+  border: 1px solid #cad3e1;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  min-width: 0;
 }
 
 .helpBlock {
@@ -88,20 +207,84 @@
   font-size: 13px;
 }
 
+.templateCard {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid #d7e4ff;
+  border-radius: 10px;
+  background: #f7faff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.templateTitle {
+  display: block;
+  margin-bottom: 4px;
+  color: #21406c;
+}
+
+.templateText {
+  margin: 0;
+  color: #516886;
+  font-size: 13px;
+}
+
 .downloadLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #bcd1f7;
+  background: #ffffff;
   color: #0d4db8;
   font-weight: 700;
   text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .downloadLink:hover {
-  text-decoration: underline;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(13, 77, 184, 0.1);
+  border-color: #8fb3f1;
 }
 
 .meta {
   margin: 12px 0;
   color: #435775;
   font-weight: 600;
+}
+
+.toastSuccess,
+.toastError {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  box-shadow: 0 6px 14px rgba(28, 53, 93, 0.08);
+}
+
+.toastSuccess {
+  background: #edf9f1;
+  color: #166534;
+  border-color: #b7e4c3;
+}
+
+.toastError {
+  background: #fff1f2;
+  color: #9f1239;
+  border-color: #fecdd3;
 }
 
 .tableWrap {
@@ -140,10 +323,26 @@
 
 @media (max-width: 720px) {
   .uploadForm {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filterForm {
     grid-template-columns: 1fr;
   }
 
+  .templateCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .uploadButton {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .deleteAllButton,
+  .deleteFilteredButton {
     width: 100%;
   }
 }
